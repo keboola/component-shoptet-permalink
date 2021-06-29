@@ -1,0 +1,114 @@
+{
+  "type": "object",
+  "title": "extractor configuration",
+  "required": [
+    "src_charset",
+    "delimiter"
+  ],
+  "properties": {
+    "orders_url": {
+      "type": "string",
+      "title": "Orders URL",
+      "propertyOrder": 10
+    },
+    "products_url": {
+      "type": "string",
+      "title": "Products URL",
+      "propertyOrder": 20
+    },
+    "customers_url": {
+      "type": "string",
+      "title": "Customers URL",
+      "propertyOrder": 30
+    },
+    "stock_url": {
+      "type": "string",
+      "title": "Stock URL",
+      "propertyOrder": 40
+    },
+    "additional_data": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "title": "Additional data",
+        "required": [
+          "name",
+          "url"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Name of output table eg. store_visitors",
+            "minLength": 1,
+            "propertyOrder": 41
+          },
+          "url": {
+            "type": "string",
+            "title": "URL",
+            "description": "Shoptet url to download data eg . https://www.example.com/export/store_visitors.csv?hash=hash",
+            "minLength": 1,
+            "propertyOrder": 42
+          }
+        }
+      },
+      "default": [],
+      "title": "Additional data",
+      "propertyOrder": 50
+    },
+    "src_charset": {
+      "enum": [
+        "IBM00858",
+        "IBM437",
+        "IBM775",
+        "IBM850",
+        "IBM852",
+        "IBM855",
+        "IBM857",
+        "IBM862",
+        "IBM866",
+        "ISO-8859-1",
+        "ISO-8859-2",
+        "ISO-8859-4",
+        "ISO-8859-5",
+        "ISO-8859-7",
+        "ISO-8859-9",
+        "ISO-8859-13",
+        "ISO-8859-15",
+        "KOI8-R",
+        "KOI8-U",
+        "US-ASCII",
+        "UTF-8",
+        "UTF-16",
+        "UTF-16BE",
+        "UTF-16LE",
+        "UTF-32",
+        "UTF-32BE",
+        "UTF-32LE",
+        "x-UTF-32BE-BOM",
+        "x-UTF-32LE-BOM",
+        "windows-1250",
+        "windows-1251",
+        "windows-1252",
+        "windows-1253",
+        "windows-1254",
+        "windows-1257",
+        "Not available",
+        "x-IBM737",
+        "x-IBM874",
+        "x-UTF-16LE-BOM"
+      ],
+      "type": "string",
+      "title": "File charset.",
+      "default": "windows-1250",
+      "description": "Determines the source file charset. All files will be converted to UTF-8.",
+      "propertyOrder": 60
+    },
+    "delimiter": {
+      "type": "string",
+      "title": "Source file delimiter",
+      "default": ";",
+      "propertyOrder": 70
+    }
+  }
+}
