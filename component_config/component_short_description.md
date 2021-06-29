@@ -1,1 +1,1 @@
-Testing functional sample extractor for purposes of the python component template. 
+Shoptet is a company that helps clients manage their eshops.
