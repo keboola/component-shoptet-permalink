@@ -3,7 +3,7 @@ import logging
 import tempfile
 import requests
 from keboola.utils.header_normalizer import get_normalizer, NormalizerStrategy
-from requests.exceptions import RequestException, ConnectionError, HTTPError
+from requests.exceptions import RequestException, ConnectionError
 from keboola.component.base import ComponentBase, UserException
 from retry import retry
 
