@@ -2,8 +2,10 @@ import csv
 import logging
 import tempfile
 import requests
-
+from keboola.utils.header_normalizer import get_normalizer, NormalizerStrategy
+from requests.exceptions import RequestException, ConnectionError, HTTPError
 from keboola.component.base import ComponentBase, UserException
+from retry import retry
 
 KEY_ORDERS_URL = 'orders_url'
 KEY_PRODUCTS_URL = 'products_url'
@@ -51,14 +53,16 @@ class Component(ComponentBase):
         for additional_datum in additional_data:
             logging.info(f"Downloading {additional_datum['name']}...")
             file_name = "".join([additional_datum["name"], ".csv"])
-            self.get_url_data_and_write_to_file(additional_datum["url"], file_name, charset)
+            self.get_url_data_and_write_to_file(additional_datum["url"], file_name, charset, delimiter)
 
     def get_url_data_and_write_to_file(self, url, table_name, encoding, delimiter):
 
         temp_file = self.fetch_data_from_url(url, encoding)
+        logging.info(f"Downloaded {table_name}, saving to tables")
         table = self.create_out_table_definition(name=table_name)
         fieldnames = self.write_from_temp_to_table(temp_file.name, table.full_path, delimiter)
-        table.columns = fieldnames
+        header_normalizer = get_normalizer(NormalizerStrategy.DEFAULT)
+        table.columns = header_normalizer.normalize_header(fieldnames)
         self.write_tabledef_manifest(table)
 
     @staticmethod
@@ -72,18 +76,22 @@ class Component(ComponentBase):
                     writer.writerow(row)
         return fieldnames
 
-    @staticmethod
-    def fetch_data_from_url(url, encoding):
-        res = requests.get(url, allow_redirects=True)
-        res.raise_for_status()
-        temp = tempfile.NamedTemporaryFile(
-            mode='w+b', suffix='.csv', delete=False
-        )
+    def fetch_data_from_url(self, url, encoding):
+        try:
+            res = self._request_url(url)
+            res.raise_for_status()
+        except RequestException as invalid:
+            raise UserException(invalid) from invalid
+        temp = tempfile.NamedTemporaryFile(mode='w+b', suffix='.csv', delete=False)
         with open(temp.name, 'w', encoding='utf-8') as out:
             for chunk in res.iter_content(chunk_size=8192):
                 chunk = chunk.decode(encoding)
                 out.write(chunk)
         return temp
+
+    @retry(ConnectionError, tries=3, delay=1)
+    def _request_url(self, url):
+        return requests.get(url, allow_redirects=True)
 
 
 if __name__ == "__main__":
