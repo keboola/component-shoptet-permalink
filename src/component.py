@@ -14,8 +14,10 @@ KEY_STOCK_URL = 'stock_url'
 KEY_ADDITIONAL_DATA = 'additional_data'
 KEY_SRC_CHARSET = "src_charset"
 KEY_DELIMITER = "delimiter"
+KEY_SHOP_BASE_URL = "base_url"
+KEY_SHOP_NAME = "shop_name"
 
-REQUIRED_PARAMETERS = [KEY_SRC_CHARSET, KEY_DELIMITER]
+REQUIRED_PARAMETERS = [KEY_SRC_CHARSET, KEY_DELIMITER, KEY_SHOP_BASE_URL, KEY_SHOP_NAME]
 REQUIRED_IMAGE_PARS = []
 
 
@@ -55,6 +57,10 @@ class Component(ComponentBase):
             file_name = "".join([additional_datum["name"], ".csv"])
             self.get_url_data_and_write_to_file(additional_datum["url"], file_name, charset, delimiter)
 
+        base_url = params.get(KEY_SHOP_BASE_URL)
+        shop_name = params.get(KEY_SHOP_NAME)
+        self.write_shoptet_table(base_url, shop_name)
+
     def get_url_data_and_write_to_file(self, url, table_name, encoding, delimiter):
 
         temp_file = self.fetch_data_from_url(url, encoding)
@@ -92,6 +98,14 @@ class Component(ComponentBase):
     @retry(ConnectionError, tries=3, delay=1)
     def _request_url(self, url):
         return requests.get(url, allow_redirects=True)
+
+    def write_shoptet_table(self, base_url, shop_name):
+        shoptet_file_name = "shoptet.csv"
+        table = self.create_out_table_definition(name=shoptet_file_name, columns=["shop_base_url", "shop_name"])
+        with open(table.full_path, mode='wt', encoding='utf-8', newline='') as out_file:
+            writer = csv.DictWriter(out_file, table.columns)
+            writer.writerow({"shop_base_url": base_url, "shop_name": shop_name})
+        self.write_tabledef_manifest(table)
 
 
 if __name__ == "__main__":

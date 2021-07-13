@@ -3,9 +3,21 @@
   "title": "extractor configuration",
   "required": [
     "src_charset",
-    "delimiter"
+    "delimiter",
+    "shop_name",
+    "base_url"
   ],
   "properties": {
+    "shop_name": {
+      "type": "string",
+      "title": "Shop Name",
+      "propertyOrder": 1
+    },
+    "base_url": {
+      "type": "string",
+      "title": "Base URL",
+      "propertyOrder": 2
+    },
     "orders_url": {
       "type": "string",
       "title": "Orders URL",
