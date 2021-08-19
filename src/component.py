@@ -85,22 +85,19 @@ class Component(ComponentBase):
 
             return fieldnames.split(delimiter)
 
+    @retry(ConnectionError, tries=3, delay=1)
     def fetch_data_from_url(self, url, encoding):
         try:
-            res = self._request_url(url)
+            res = requests.get(url, stream=True, allow_redirects=True)
             res.raise_for_status()
         except RequestException as invalid:
             raise UserException(invalid) from invalid
         temp = tempfile.NamedTemporaryFile(mode='w+b', suffix='.csv', delete=False)
         with open(temp.name, 'w', encoding='utf-8') as out:
-            for chunk in res.iter_content(chunk_size=None):
+            for chunk in res.iter_content(chunk_size=8192):
                 chunk = chunk.decode(encoding)
                 out.write(chunk)
         return temp
-
-    @retry(ConnectionError, tries=3, delay=1)
-    def _request_url(self, url):
-        return requests.get(url, stream=True, allow_redirects=True)
 
     def write_shoptet_table(self, base_url, shop_name):
         shoptet_file_name = "shoptet.csv"
