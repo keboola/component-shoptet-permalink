@@ -1,10 +1,13 @@
 import csv
 import logging
+import shutil
 import tempfile
+from typing import List
+
 import requests
+from keboola.component.base import ComponentBase, UserException
 from keboola.utils.header_normalizer import get_normalizer, NormalizerStrategy
 from requests.exceptions import RequestException, ConnectionError
-from keboola.component.base import ComponentBase, UserException
 from retry import retry
 
 KEY_ORDERS_URL = 'orders_url'
@@ -66,21 +69,21 @@ class Component(ComponentBase):
         temp_file = self.fetch_data_from_url(url, encoding)
         logging.info(f"Downloaded {table_name}, saving to tables")
         table = self.create_out_table_definition(name=table_name)
+        table.delimiter = delimiter
+
         fieldnames = self.write_from_temp_to_table(temp_file.name, table.full_path, delimiter)
         header_normalizer = get_normalizer(NormalizerStrategy.DEFAULT)
         table.columns = header_normalizer.normalize_header(fieldnames)
         self.write_tabledef_manifest(table)
 
     @staticmethod
-    def write_from_temp_to_table(temp_file_path, table_path, delimiter):
-        with open(temp_file_path, mode='r', encoding='utf-8') as in_file:
-            reader = csv.DictReader(in_file, delimiter=delimiter)
-            fieldnames = reader.fieldnames
-            with open(table_path, mode='wt', encoding='utf-8', newline='') as out_file:
-                writer = csv.DictWriter(out_file, reader.fieldnames)
-                for row in reader:
-                    writer.writerow(row)
-        return fieldnames
+    def write_from_temp_to_table(temp_file_path, table_path, delimiter) -> List[str]:
+        with open(temp_file_path, mode='r', encoding='utf-8') as in_file, \
+                open(table_path, mode='wt', encoding='utf-8', newline='') as out_file:
+            fieldnames = in_file.readline()
+            shutil.copyfileobj(in_file, out_file)
+
+            return fieldnames.split(delimiter)
 
     def fetch_data_from_url(self, url, encoding):
         try:
@@ -90,14 +93,14 @@ class Component(ComponentBase):
             raise UserException(invalid) from invalid
         temp = tempfile.NamedTemporaryFile(mode='w+b', suffix='.csv', delete=False)
         with open(temp.name, 'w', encoding='utf-8') as out:
-            for chunk in res.iter_content(chunk_size=8192):
+            for chunk in res.iter_content(chunk_size=None):
                 chunk = chunk.decode(encoding)
                 out.write(chunk)
         return temp
 
     @retry(ConnectionError, tries=3, delay=1)
     def _request_url(self, url):
-        return requests.get(url, allow_redirects=True)
+        return requests.get(url, stream=True, allow_redirects=True)
 
     def write_shoptet_table(self, base_url, shop_name):
         shoptet_file_name = "shoptet.csv"
