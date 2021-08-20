@@ -108,7 +108,7 @@ class Component(ComponentBase):
             logging.info(f"Downloading stocks {start_date} - {end_date}....")
             stock_url = self._add_date_url_parameters(stock_url, start_date, end_date)
             self.get_url_data_and_write_to_file(stock_url, "stocks.csv", charset, delimiter,
-                                                primary_key=["code"],
+                                                primary_key=["itemCode"],
                                                 incremental=incremental)
 
         additional_data = params.get(KEY_ADDITIONAL_DATA)
