@@ -3,9 +3,10 @@ Created on 12. 11. 2018
 
 @author: esner
 '''
-import unittest
-import mock
 import os
+import unittest
+
+import mock
 from freezegun import freeze_time
 
 from component import Component
@@ -21,6 +22,15 @@ class TestComponent(unittest.TestCase):
         with self.assertRaises(ValueError):
             comp = Component()
             comp.run()
+
+    def test_add_date_to_url(self):
+        comp = Component()
+        url = 'https://www.eshop.cz/expourlorders.csv?patternId=144&dateFrom=2018-1-1&dateUntil=2018-12-31&hash=1234'
+
+        expected = 'https://www.eshop.cz/expourlorders.csv?patternId=144&dateFrom=2020-01-01&dateUntil=2021-01-01' \
+                   '&hash=1234'
+        changed = comp._add_date_url_parameters(url, '2020-01-01', '2021-01-01')
+        self.assertEqual(changed, expected)
 
 
 if __name__ == "__main__":

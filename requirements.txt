@@ -4,3 +4,4 @@ keboola.http-client
 mock
 freezegun
 retry
+furl

@@ -1,14 +1,21 @@
 import csv
 import logging
+import os
 import shutil
 import tempfile
+import uuid
+from pathlib import Path
 from typing import List
 
 import requests
+from furl import furl
+from keboola import utils as keboola_utils
 from keboola.component.base import ComponentBase, UserException
 from keboola.utils.header_normalizer import get_normalizer, NormalizerStrategy
 from requests.exceptions import RequestException, ConnectionError
 from retry import retry
+
+DATE_FORMAT = '%Y-%m-%d'
 
 KEY_ORDERS_URL = 'orders_url'
 KEY_PRODUCTS_URL = 'products_url'
@@ -19,6 +26,10 @@ KEY_SRC_CHARSET = "src_charset"
 KEY_DELIMITER = "delimiter"
 KEY_SHOP_BASE_URL = "base_url"
 KEY_SHOP_NAME = "shop_name"
+KEY_LOADING_OPTIONS = "loading_options"
+KEY_DATE_SINCE = "date_since"
+KEY_DATE_TO = "date_to"
+KEY_INCREMENTAL = "incremental_output"
 
 REQUIRED_PARAMETERS = [KEY_SRC_CHARSET, KEY_DELIMITER, KEY_SHOP_BASE_URL, KEY_SHOP_NAME]
 REQUIRED_IMAGE_PARS = []
@@ -31,48 +42,101 @@ class Component(ComponentBase):
 
     def run(self):
         params = self.configuration.parameters
-        charset = params.get(KEY_SRC_CHARSET)
-        delimiter = params.get(KEY_DELIMITER)
-        incremental = True
 
-        orders_url = params.get(KEY_ORDERS_URL)
-        if orders_url:
-            logging.info("Downloading orders...")
-            self.get_url_data_and_write_to_file(orders_url, "orders.csv", charset, delimiter, incremental)
+        loading_options = params.get(KEY_LOADING_OPTIONS, {})
+        start_date, end_date = keboola_utils.parse_datetime_interval(loading_options.get(KEY_DATE_SINCE, '1980-01-01'),
+                                                                     loading_options.get(KEY_DATE_TO, 'now'))
+        backfill_mode = loading_options.get('backfill_mode')
 
-        products_url = params.get(KEY_PRODUCTS_URL)
-        if products_url:
-            logging.info("Downloading products...")
-            self.get_url_data_and_write_to_file(products_url, "products.csv", charset, delimiter, incremental)
+        if backfill_mode:
+            chunk_size = loading_options.get("chunk_size_days")
 
-        customers_url = params.get(KEY_CUSTOMERS_URL)
-        if customers_url:
-            logging.info("Downloading customers...")
-            self.get_url_data_and_write_to_file(customers_url, "customers.csv", charset, delimiter, incremental)
+            date_chunks = keboola_utils.split_dates_to_chunks(start_date, end_date, chunk_size, strformat=DATE_FORMAT)
 
-        stock_url = params.get(KEY_STOCK_URL)
-        if stock_url:
-            logging.info("Downloading stocks...")
-            self.get_url_data_and_write_to_file(stock_url, "stocks.csv", charset, delimiter, incremental)
+        else:
+            date_chunks = [{"start_date": start_date.strftime(DATE_FORMAT),
+                            "end_date": end_date.strftime(DATE_FORMAT)}]
 
-        additional_data = params.get(KEY_ADDITIONAL_DATA)
-        for additional_datum in additional_data:
-            logging.info(f"Downloading {additional_datum['name']}...")
-            file_name = "".join([additional_datum["name"], ".csv"])
-            self.get_url_data_and_write_to_file(additional_datum["url"], file_name, charset, delimiter)
+        # download data
+        for chunk in date_chunks:
+            self._download_all_tables(chunk['start_date'], chunk['end_date'])
 
         base_url = params.get(KEY_SHOP_BASE_URL)
         shop_name = params.get(KEY_SHOP_NAME)
         self.write_shoptet_table(base_url, shop_name)
 
-    def get_url_data_and_write_to_file(self, url, table_name, encoding, delimiter, incremental: bool = False):
+    def _download_all_tables(self, start_date: str, end_date: str):
+        params = self.configuration.parameters
+        charset = params.get(KEY_SRC_CHARSET)
+        delimiter = params.get(KEY_DELIMITER)
+        loading_options = params.get(KEY_LOADING_OPTIONS, {})
+        incremental = loading_options.get(KEY_INCREMENTAL)
+
+        orders_url = params.get(KEY_ORDERS_URL)
+        if orders_url:
+            logging.info(f"Downloading orders in period {start_date} - {end_date}...")
+            orders_url = self._add_date_url_parameters(orders_url, start_date, end_date)
+            self.get_url_data_and_write_to_file(orders_url, "orders.csv", charset, delimiter,
+                                                primary_key=["code", "itemCode", "itemName"],
+                                                incremental=incremental)
+
+        products_url = params.get(KEY_PRODUCTS_URL)
+        if products_url:
+            logging.info(f"Downloading products {start_date} - {end_date}....")
+
+            products_url = self._add_date_url_parameters(products_url, start_date, end_date)
+            self.get_url_data_and_write_to_file(products_url, "products.csv", charset, delimiter,
+                                                primary_key=["code"],
+                                                incremental=incremental)
+
+        customers_url = params.get(KEY_CUSTOMERS_URL)
+        if customers_url:
+            logging.info(f"Downloading customers {start_date} - {end_date}....")
+            customers_url = self._add_date_url_parameters(customers_url, start_date, end_date)
+            self.get_url_data_and_write_to_file(customers_url, "customers.csv", charset, delimiter,
+                                                primary_key=["accountGuid"],
+                                                incremental=incremental)
+
+        stock_url = params.get(KEY_STOCK_URL)
+        if stock_url:
+            logging.info(f"Downloading stocks {start_date} - {end_date}....")
+            stock_url = self._add_date_url_parameters(stock_url, start_date, end_date)
+            self.get_url_data_and_write_to_file(stock_url, "stocks.csv", charset, delimiter,
+                                                primary_key=["code"],
+                                                incremental=incremental)
+
+        additional_data = params.get(KEY_ADDITIONAL_DATA)
+        for additional_datum in additional_data:
+            logging.info(f"Downloading {additional_datum['name']} {start_date} - {end_date}....")
+            file_name = "".join([additional_datum["name"], ".csv"])
+            primary_key = additional_data.get('primary_key', [])
+            add_url = self._add_date_url_parameters(additional_datum["url"], start_date, end_date)
+            self.get_url_data_and_write_to_file(add_url, file_name, charset, delimiter,
+                                                primary_key=primary_key,
+                                                incremental=incremental)
+
+    @staticmethod
+    def _add_date_url_parameters(url: str, start_date: str, end_date: str):
+        url_parsed = furl(url)
+        query_params = url_parsed.query.params
+        query_params["dateFrom"] = start_date
+        query_params["dateUntil"] = end_date
+        url_parsed.set(query_params)
+        return url_parsed.url
+
+    def get_url_data_and_write_to_file(self, url, table_name, encoding, delimiter,
+                                       primary_key: List[str], incremental: bool = False):
 
         temp_file = self.fetch_data_from_url(url, encoding)
-        logging.info(f"Downloaded {table_name}, saving to tables")
-        table = self.create_out_table_definition(name=table_name, primary_key=['id'], incremental=incremental)
+        logging.debug(f"Downloaded {table_name}, saving to tables")
+        table = self.create_out_table_definition(name=table_name, primary_key=primary_key, incremental=incremental)
         table.delimiter = delimiter
 
-        fieldnames = self.write_from_temp_to_table(temp_file.name, table.full_path, delimiter)
+        # sliced table for backfill mode
+        Path(table.full_path).mkdir(parents=True, exist_ok=True)
+        result_path = os.path.join(table.full_path, str(uuid.uuid4()))
+
+        fieldnames = self.write_from_temp_to_table(temp_file.name, result_path, delimiter)
         header_normalizer = get_normalizer(NormalizerStrategy.DEFAULT)
         table.columns = header_normalizer.normalize_header(fieldnames)
         self.write_tabledef_manifest(table)
