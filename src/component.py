@@ -33,26 +33,27 @@ class Component(ComponentBase):
         params = self.configuration.parameters
         charset = params.get(KEY_SRC_CHARSET)
         delimiter = params.get(KEY_DELIMITER)
+        incremental = True
 
         orders_url = params.get(KEY_ORDERS_URL)
         if orders_url:
             logging.info("Downloading orders...")
-            self.get_url_data_and_write_to_file(orders_url, "orders.csv", charset, delimiter)
+            self.get_url_data_and_write_to_file(orders_url, "orders.csv", charset, delimiter, incremental)
 
         products_url = params.get(KEY_PRODUCTS_URL)
         if products_url:
             logging.info("Downloading products...")
-            self.get_url_data_and_write_to_file(products_url, "products.csv", charset, delimiter)
+            self.get_url_data_and_write_to_file(products_url, "products.csv", charset, delimiter, incremental)
 
         customers_url = params.get(KEY_CUSTOMERS_URL)
         if customers_url:
             logging.info("Downloading customers...")
-            self.get_url_data_and_write_to_file(customers_url, "customers.csv", charset, delimiter)
+            self.get_url_data_and_write_to_file(customers_url, "customers.csv", charset, delimiter, incremental)
 
         stock_url = params.get(KEY_STOCK_URL)
         if stock_url:
             logging.info("Downloading stocks...")
-            self.get_url_data_and_write_to_file(stock_url, "stocks.csv", charset, delimiter)
+            self.get_url_data_and_write_to_file(stock_url, "stocks.csv", charset, delimiter, incremental)
 
         additional_data = params.get(KEY_ADDITIONAL_DATA)
         for additional_datum in additional_data:
@@ -64,11 +65,11 @@ class Component(ComponentBase):
         shop_name = params.get(KEY_SHOP_NAME)
         self.write_shoptet_table(base_url, shop_name)
 
-    def get_url_data_and_write_to_file(self, url, table_name, encoding, delimiter):
+    def get_url_data_and_write_to_file(self, url, table_name, encoding, delimiter, incremental: bool = False):
 
         temp_file = self.fetch_data_from_url(url, encoding)
         logging.info(f"Downloaded {table_name}, saving to tables")
-        table = self.create_out_table_definition(name=table_name)
+        table = self.create_out_table_definition(name=table_name, primary_key=['id'], incremental=incremental)
         table.delimiter = delimiter
 
         fieldnames = self.write_from_temp_to_table(temp_file.name, table.full_path, delimiter)
@@ -82,7 +83,6 @@ class Component(ComponentBase):
                 open(table_path, mode='wt', encoding='utf-8', newline='') as out_file:
             fieldnames = in_file.readline()
             shutil.copyfileobj(in_file, out_file)
-
             return fieldnames.split(delimiter)
 
     @retry(ConnectionError, tries=3, delay=1)
