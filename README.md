@@ -15,3 +15,22 @@ This component enables you to download data from Shoptet permalinks.
    - URL (url) - [REQ] URL of permalink to additional data
  - File charset. (src_charset) - [REQ] Determines the source file charset. All files will be converted to UTF-8.
  - Source file delimiter (delimiter) - [REQ] 
+
+
+
+
+## Example configuration
+
+```json
+{
+  "shop_name": "test",
+  "base_url": "ss",
+  "orders_url": "URL",
+  "products_url": "URL",
+  "customers_url": "URL",
+  "stock_url": "URL",
+  "additional_data": [],
+  "src_charset": "windows-1250",
+  "delimiter": ";"
+}
+```
