@@ -177,11 +177,6 @@
           "type": "number",
           "title": "Chunk size in days",
           "default": 360,
-          "options": {
-            "dependencies": {
-              "backfill_mode": 1
-            }
-          },
           "propertyOrder": 550
         },
         "incremental_output": {
