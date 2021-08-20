@@ -44,8 +44,14 @@ class Component(ComponentBase):
         params = self.configuration.parameters
 
         loading_options = params.get(KEY_LOADING_OPTIONS, {})
-        start_date, end_date = keboola_utils.parse_datetime_interval(loading_options.get(KEY_DATE_SINCE, '1980-01-01'),
-                                                                     loading_options.get(KEY_DATE_TO, 'now'))
+        dt_since_str = loading_options.get(KEY_DATE_SINCE, '1980-01-01')
+        if not dt_since_str:
+            dt_since_str = '1980-01-01'
+        dt_to_str = loading_options.get(KEY_DATE_TO, 'now')
+        if not dt_to_str:
+            dt_to_str = 'now'
+
+        start_date, end_date = keboola_utils.parse_datetime_interval(dt_since_str, dt_to_str)
         backfill_mode = loading_options.get('backfill_mode')
 
         if backfill_mode:
