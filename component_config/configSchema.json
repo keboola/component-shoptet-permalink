@@ -8,65 +8,31 @@
     "base_url"
   ],
   "properties": {
-    "shop_name": {
-      "type": "string",
-      "title": "Shop Name",
-      "propertyOrder": 1
-    },
     "base_url": {
       "type": "string",
       "title": "Base URL",
       "propertyOrder": 2
     },
-    "orders_url": {
+    "delimiter": {
       "type": "string",
-      "title": "Orders URL",
-      "propertyOrder": 10
+      "title": "Source file delimiter",
+      "default": ";",
+      "propertyOrder": 70
     },
-    "products_url": {
+    "shop_name": {
       "type": "string",
-      "title": "Products URL",
-      "propertyOrder": 20
-    },
-    "customers_url": {
-      "type": "string",
-      "title": "Customers URL",
-      "propertyOrder": 30
+      "title": "Shop Name",
+      "propertyOrder": 1
     },
     "stock_url": {
       "type": "string",
       "title": "Stock URL",
       "propertyOrder": 40
     },
-    "additional_data": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "title": "Additional data",
-        "required": [
-          "name",
-          "url"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name",
-            "description": "Name of output table eg. store_visitors",
-            "minLength": 1,
-            "propertyOrder": 41
-          },
-          "url": {
-            "type": "string",
-            "title": "URL",
-            "description": "Shoptet url to download data eg . https://www.example.com/export/store_visitors.csv?hash=hash",
-            "minLength": 1,
-            "propertyOrder": 42
-          }
-        }
-      },
-      "default": [],
-      "title": "Additional data",
-      "propertyOrder": 50
+    "orders_url": {
+      "type": "string",
+      "title": "Orders URL",
+      "propertyOrder": 10
     },
     "src_charset": {
       "enum": [
@@ -116,11 +82,127 @@
       "description": "Determines the source file charset. All files will be converted to UTF-8.",
       "propertyOrder": 60
     },
-    "delimiter": {
+    "products_url": {
       "type": "string",
-      "title": "Source file delimiter",
-      "default": ";",
-      "propertyOrder": 70
+      "title": "Products URL",
+      "propertyOrder": 20
+    },
+    "customers_url": {
+      "type": "string",
+      "title": "Customers URL",
+      "propertyOrder": 30
+    },
+    "additional_data": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "title": "Additional data",
+        "required": [
+          "name",
+          "url",
+          "primary_key"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "URL",
+            "minLength": 1,
+            "description": "Shoptet url to download data eg . https://www.example.com/export/store_visitors.csv?hash=hash",
+            "propertyOrder": 42
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "minLength": 1,
+            "description": "Name of output table eg. store_visitors",
+            "propertyOrder": 41
+          },
+          "primary_key": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "title": "Column name"
+            },
+            "title": "Primary key",
+            "propertyOrder": 5000
+          }
+        }
+      },
+      "title": "Additional data",
+      "default": [],
+      "propertyOrder": 50
+    },
+    "loading_options": {
+      "type": "object",
+      "title": "Loading Options",
+      "format": "grid",
+      "required": [
+        "incremental_output",
+        "date_since",
+        "date_to",
+        "backfill_mode"
+      ],
+      "properties": {
+        "date_to": {
+          "type": "string",
+          "title": "Period to date [excluding].",
+          "default": "now",
+          "description": " Date in YYYY-MM-DD format or dateparser string i.e. 5 days ago, 1 month ago, yesterday, etc. If left empty, all records are downloaded.",
+          "propertyOrder": 400
+        },
+        "date_since": {
+          "type": "string",
+          "title": "Period from date [including].",
+          "default": "1 week ago",
+          "description": " Date in YYYY-MM-DD format or dateparser string i.e. 5 days ago, 1 month ago, yesterday, etc. If left empty, all records are downloaded.",
+          "propertyOrder": 300
+        },
+        "backfill_mode": {
+          "type": "number",
+          "enum": [
+            0,
+            1
+          ],
+          "options": {
+            "enum_titles": [
+              "No",
+              "Yes"
+            ]
+          },
+          "title": "Download in chunks",
+          "default": 0,
+          "propertyOrder": 500
+        },
+        "chunk_size_days": {
+          "type": "number",
+          "title": "Chunk size in days",
+          "default": 360,
+          "options": {
+            "dependencies": {
+              "backfill_mode": 1
+            }
+          },
+          "propertyOrder": 550
+        },
+        "incremental_output": {
+          "enum": [
+            0,
+            1
+          ],
+          "type": "number",
+          "title": "Load type",
+          "default": 1,
+          "options": {
+            "enum_titles": [
+              "Full Load",
+              "Incremental Update"
+            ]
+          },
+          "description": "If set to Incremental update, the result tables will be updated based on primary key. Full load overwrites the destination table each time. NOTE: If you wish to remove deleted records, this needs to be set to Full load and the Period from attribute empty.",
+          "propertyOrder": 450
+        }
+      },
+      "propertyOrder": 400
     }
   }
 }
