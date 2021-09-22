@@ -1,6 +1,9 @@
 # Shoptet Permalink Extractor
 
 This component enables you to download data from Shoptet permalinks.
+
+Official Keboola documentation available at [https://help.keboola.com/components/extractors/marketing-sales/shoptet/](https://help.keboola.com/components/extractors/marketing-sales/shoptet/)
+
 **Table of contents:**
 
 [TOC]
@@ -9,10 +12,10 @@ This component enables you to download data from Shoptet permalinks.
 
 - Shop Name (shop_name) - [REQ] Name of shop
 - Base URL (base_url) - [REQ] url of the shop
-- Orders URL (orders_url) - [OPT] URL of permalink to orders data
-- Products URL (products_url) - [OPT] URL of permalink to products data
-- Customers URL (customers_url) - [OPT] URL of permalink to customers data
-- Stock URL (stock_url) - [OPT] URL of permalink to stock data
+- Orders URL (orders_url) - [OPT] URL of permalink to orders data including the hash value
+- Products URL (products_url) - [OPT] URL of permalink to products data including the hash value
+- Customers URL (customers_url) - [OPT] URL of permalink to customers data including the hash value
+- Stock URL (stock_url) - [OPT] URL of permalink to stock data including the hash value
 - Additional data (additional_data) - [OPT]
     - Name (name) - [REQ] Name of additional data, will be used as table output name
     - URL (url) - [REQ] URL of permalink to additional data
