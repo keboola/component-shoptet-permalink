@@ -111,11 +111,11 @@ class Component(ComponentBase):
                                                 primary_key=["itemCode"],
                                                 incremental=incremental)
 
-        additional_data = params.get(KEY_ADDITIONAL_DATA)
+        additional_data = params.get(KEY_ADDITIONAL_DATA, [])
         for additional_datum in additional_data:
             logging.info(f"Downloading {additional_datum['name']} {start_date} - {end_date}....")
             file_name = "".join([additional_datum["name"], ".csv"])
-            primary_key = additional_data.get('primary_key', [])
+            primary_key = additional_datum.get('primary_key', [])
             add_url = self._add_date_url_parameters(additional_datum["url"], start_date, end_date)
             self.get_url_data_and_write_to_file(add_url, file_name, charset, delimiter,
                                                 primary_key=primary_key,
@@ -133,7 +133,10 @@ class Component(ComponentBase):
     def get_url_data_and_write_to_file(self, url, table_name, encoding, delimiter,
                                        primary_key: List[str], incremental: bool = False):
 
-        temp_file = self.fetch_data_from_url(url, encoding)
+        try:
+            temp_file = self.fetch_data_from_url(url, encoding)
+        except UnicodeDecodeError:
+            raise UserException(f"Failed to decode file with {encoding}")
         logging.debug(f"Downloaded {table_name}, saving to tables")
         table = self.create_out_table_definition(name=table_name, primary_key=primary_key, incremental=incremental)
         table.delimiter = delimiter
