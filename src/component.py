@@ -136,7 +136,7 @@ class Component(ComponentBase):
         try:
             temp_file = self.fetch_data_from_url(url, encoding)
         except UnicodeDecodeError:
-            raise UserException(f"Failed to decode file with {encoding}")
+            raise UserException(f"Failed to decode file with {encoding}, use a different encoding")
         logging.debug(f"Downloaded {table_name}, saving to tables")
         table = self.create_out_table_definition(name=table_name, primary_key=primary_key, incremental=incremental)
         table.delimiter = delimiter
