@@ -84,6 +84,7 @@ class Component(ComponentBase):
             orders_url = self._add_date_url_parameters(orders_url, start_date, end_date)
             self.get_url_data_and_write_to_file(orders_url, "orders.csv", charset, delimiter,
                                                 primary_key=["code", "itemCode", "itemName"],
+                                                alt_primary_key=["code", "orderItemCode", "orderItemName"],
                                                 incremental=incremental)
 
         products_url = params.get(KEY_PRODUCTS_URL)
@@ -131,7 +132,8 @@ class Component(ComponentBase):
         return url_parsed.url
 
     def get_url_data_and_write_to_file(self, url, table_name, encoding, delimiter,
-                                       primary_key: List[str], incremental: bool = False):
+                                       primary_key: List[str], alt_primary_key: List[str] = None,
+                                       incremental: bool = False):
 
         try:
             temp_file = self.fetch_data_from_url(url, encoding)
@@ -146,9 +148,32 @@ class Component(ComponentBase):
         result_path = os.path.join(table.full_path, str(uuid.uuid4()))
 
         fieldnames = self.write_from_temp_to_table(temp_file.name, result_path, delimiter)
+        fieldnames = self.strip_quotes(fieldnames)
+        if not self.valid_primary_keys(primary_key, fieldnames):
+            if self.valid_primary_keys(alt_primary_key, fieldnames):
+                table.primary_key = alt_primary_key
+            else:
+                raise UserException(f"Error adding primary keys to file {table_name}, please contact support. "
+                                    f"primary keys {primary_key} not in {fieldnames}")
+
         header_normalizer = get_normalizer(NormalizerStrategy.DEFAULT)
         table.columns = header_normalizer.normalize_header(fieldnames)
         self.write_tabledef_manifest(table)
+
+    def strip_quotes(self, list_of_str):
+        new_list = []
+        for val in list_of_str:
+            new_list.append(val.replace("\"", ""))
+        return new_list
+
+    @staticmethod
+    def valid_primary_keys(primary_key, fieldnames):
+        if primary_key is None:
+            return False
+        for p_key in primary_key:
+            if p_key not in fieldnames:
+                return False
+        return True
 
     @staticmethod
     def write_from_temp_to_table(temp_file_path, table_path, delimiter) -> List[str]:
