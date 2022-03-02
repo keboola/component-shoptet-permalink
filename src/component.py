@@ -5,6 +5,7 @@ import requests
 import shutil
 import tempfile
 import uuid
+import warnings
 from furl import furl
 from keboola import utils as keboola_utils
 from keboola.component.base import ComponentBase, UserException
