@@ -8,6 +8,11 @@
     "base_url"
   ],
   "properties": {
+    "shop_name": {
+      "type": "string",
+      "title": "Shop Name",
+      "propertyOrder": 1
+    },
     "base_url": {
       "type": "string",
       "title": "Base URL",
@@ -24,11 +29,6 @@
       "title": "Source file delimiter",
       "default": ";",
       "propertyOrder": 70
-    },
-    "shop_name": {
-      "type": "string",
-      "title": "Shop Name",
-      "propertyOrder": 1
     },
     "stock_url": {
       "type": "string",

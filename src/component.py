@@ -1,19 +1,18 @@
 import csv
 import logging
 import os
+import requests
 import shutil
 import tempfile
 import uuid
-from pathlib import Path
-from typing import List
-
-import requests
 from furl import furl
 from keboola import utils as keboola_utils
 from keboola.component.base import ComponentBase, UserException
 from keboola.utils.header_normalizer import get_normalizer, NormalizerStrategy
+from pathlib import Path
 from requests.exceptions import RequestException, ConnectionError
 from retry import retry
+from typing import List
 
 DATE_FORMAT = '%Y-%m-%d'
 
@@ -39,6 +38,12 @@ class Component(ComponentBase):
     def __init__(self):
         super().__init__(required_parameters=REQUIRED_PARAMETERS,
                          required_image_parameters=REQUIRED_IMAGE_PARS)
+
+        # temp suppress pytz warning
+        warnings.filterwarnings(
+            "ignore",
+            message="The localize method is no longer necessary, as this time zone supports the fold attribute",
+        )
 
     def run(self):
         params = self.configuration.parameters
