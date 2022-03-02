@@ -11,6 +11,12 @@
     "base_url": {
       "type": "string",
       "title": "Base URL",
+      "description": "Your shop url. e.g. https://www.myshop.cz",
+      "options": {
+        "inputAttributes": {
+          "placeholder": "https://www.myshop.cz"
+        }
+      },
       "propertyOrder": 2
     },
     "delimiter": {
@@ -27,11 +33,23 @@
     "stock_url": {
       "type": "string",
       "title": "Stock URL",
+      "description": "e.g. https://www.myshop.cz/export/stockStatistics.csv?hash=XXXXX",
+      "options": {
+        "inputAttributes": {
+          "placeholder": "https://www.myshop.cz/export/stockStatistics.csv?hash=XXXXX"
+        }
+      },
       "propertyOrder": 40
     },
     "orders_url": {
       "type": "string",
       "title": "Orders URL",
+      "description": "e.g. https://www.myshop.cz/export/orders.csv?hash=XXXXX",
+      "options": {
+        "inputAttributes": {
+          "placeholder": "https://www.myshop.cz/export/orders.csv?hash=XXXXX"
+        }
+      },
       "propertyOrder": 10
     },
     "src_charset": {
@@ -85,11 +103,23 @@
     "products_url": {
       "type": "string",
       "title": "Products URL",
+      "description": "e.g. https://www.myshop.cz/export/products.csv?hash=XXXXX",
+      "options": {
+        "inputAttributes": {
+          "placeholder": "https://www.myshop.cz/export/products.csv?hash=XXXXX"
+        }
+      },
       "propertyOrder": 20
     },
     "customers_url": {
       "type": "string",
       "title": "Customers URL",
+      "description": "e.g. https://www.myshop.cz/export/customers.csv?hash=XXXXX",
+      "options": {
+        "inputAttributes": {
+          "placeholder": "https://www.myshop.cz/export/customers.csv?hash=XXXXX"
+        }
+      },
       "propertyOrder": 30
     },
     "additional_data": {
