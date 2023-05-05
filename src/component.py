@@ -1,19 +1,20 @@
 import csv
 import logging
 import os
-import requests
 import shutil
 import tempfile
 import uuid
 import warnings
+from pathlib import Path
+from typing import List
+
+import requests
 from furl import furl
 from keboola import utils as keboola_utils
 from keboola.component.base import ComponentBase, UserException
 from keboola.utils.header_normalizer import get_normalizer, NormalizerStrategy
-from pathlib import Path
 from requests.exceptions import RequestException, ConnectionError
 from retry import retry
-from typing import List
 
 DATE_FORMAT = '%Y-%m-%d'
 
@@ -142,7 +143,7 @@ class Component(ComponentBase):
                                        incremental: bool = False):
 
         try:
-            temp_file = self.fetch_data_from_url(url, encoding)
+            temp_file = self.fetch_data_from_url(url)
         except UnicodeDecodeError:
             raise UserException(f"Failed to decode file with {encoding}, use a different encoding")
         logging.debug(f"Downloaded {table_name}, saving to tables")
@@ -153,7 +154,7 @@ class Component(ComponentBase):
         Path(table.full_path).mkdir(parents=True, exist_ok=True)
         result_path = os.path.join(table.full_path, str(uuid.uuid4()))
 
-        fieldnames = self.write_from_temp_to_table(temp_file.name, result_path, delimiter)
+        fieldnames = self.write_from_temp_to_table(temp_file.name, result_path, delimiter, encoding)
         fieldnames = self.strip_quotes(fieldnames)
         if not self.valid_primary_keys(primary_key, fieldnames):
             if self.valid_primary_keys(alt_primary_key, fieldnames):
@@ -182,24 +183,27 @@ class Component(ComponentBase):
         return True
 
     @staticmethod
-    def write_from_temp_to_table(temp_file_path, table_path, delimiter) -> List[str]:
-        with open(temp_file_path, mode='r', encoding='utf-8') as in_file, \
+    def write_from_temp_to_table(temp_file_path, table_path, delimiter, encoding) -> List[str]:
+        with open(temp_file_path, mode='r', encoding=encoding) as in_file, \
                 open(table_path, mode='wt', encoding='utf-8', newline='') as out_file:
             fieldnames = in_file.readline()
             shutil.copyfileobj(in_file, out_file)
+            # workaround for:
+            # https://stackoverflow.com/questions/40310042/python-read-csv-bom-embedded-into-the-first-key
+            if fieldnames.startswith("\ufeff"):
+                fieldnames = fieldnames.replace("\ufeff", "")
             return fieldnames.split(delimiter)
 
     @retry(ConnectionError, tries=3, delay=1)
-    def fetch_data_from_url(self, url, encoding):
+    def fetch_data_from_url(self, url):
         try:
             res = requests.get(url, stream=True, allow_redirects=True)
             res.raise_for_status()
         except RequestException as invalid:
             raise UserException(invalid) from invalid
         temp = tempfile.NamedTemporaryFile(mode='w+b', suffix='.csv', delete=False)
-        with open(temp.name, 'w', encoding='utf-8') as out:
+        with open(temp.name, 'wb+') as out:
             for chunk in res.iter_content(chunk_size=8192):
-                chunk = chunk.decode(encoding)
                 out.write(chunk)
         return temp
 

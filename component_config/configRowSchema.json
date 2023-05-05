@@ -184,7 +184,7 @@
       ],
       "type": "string",
       "title": "File charset.",
-      "default": "windows-1250",
+      "default": "UTF-8",
       "description": "Determines the source file charset. All files will be converted to UTF-8.",
       "propertyOrder": 60
     },
