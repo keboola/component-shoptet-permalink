@@ -49,7 +49,6 @@ class Component(ComponentBase):
 
         self.old_columns = {}  # columns loaded from statefile
         self.fetched_columns = {}  # fetched columns
-        self.columns_not_fetched = {}  # columns not fetched
 
     def run(self):
         params = self.configuration.parameters
@@ -181,23 +180,27 @@ class Component(ComponentBase):
             diff = [item for item in self.old_columns[table.name] if item not in table_columns]
 
         if diff:
-            nr_of_empty_cols = len(diff)
-            empty_column = [''] * nr_of_empty_cols
-
-            with tempfile.NamedTemporaryFile(mode='wt', encoding='utf-8', newline='', delete=False) as f_temp:
-                csv_writer = csv.writer(f_temp)
-                with open(result_path, 'r') as f_read:
-                    csv_reader = csv.reader(f_read)
-                    for row in csv_reader:
-                        csv_writer.writerow(row + empty_column)
-
-            shutil.move(f_temp.name, result_path)
+            self.add_empty_cols(diff, result_path)
 
         table_columns.extend(diff)
         self.fetched_columns[table.name] = table_columns
 
         table.columns = table_columns
         self.write_tabledef_manifest(table)
+
+    @staticmethod
+    def add_empty_cols(diff, result_path):
+        nr_of_empty_cols = len(diff)
+        empty_column = [''] * nr_of_empty_cols
+
+        with tempfile.NamedTemporaryFile(mode='wt', encoding='utf-8', newline='', delete=False) as f_temp:
+            csv_writer = csv.writer(f_temp)
+            with open(result_path, 'r') as f_read:
+                csv_reader = csv.reader(f_read)
+                for row in csv_reader:
+                    csv_writer.writerow(row + empty_column)
+
+        shutil.move(f_temp.name, result_path)
 
     def strip_quotes(self, list_of_str):
         new_list = []
