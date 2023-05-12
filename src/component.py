@@ -47,6 +47,10 @@ class Component(ComponentBase):
             message="The localize method is no longer necessary, as this time zone supports the fold attribute",
         )
 
+        self.old_columns = {}  # columns loaded from statefile
+        self.fetched_columns = {}  # fetched columns
+        self.columns_not_fetched = {}  # columns not fetched
+
     def run(self):
         params = self.configuration.parameters
 
@@ -57,6 +61,10 @@ class Component(ComponentBase):
         dt_to_str = loading_options.get(KEY_DATE_TO, 'now')
         if not dt_to_str:
             dt_to_str = 'now'
+
+        statefile = self.get_state_file()
+        if statefile:
+            self.old_columns = statefile
 
         start_date, end_date = keboola_utils.parse_datetime_interval(dt_since_str, dt_to_str)
         backfill_mode = loading_options.get('backfill_mode')
@@ -77,6 +85,8 @@ class Component(ComponentBase):
         base_url = params.get(KEY_SHOP_BASE_URL)
         shop_name = params.get(KEY_SHOP_NAME)
         self.write_shoptet_table(base_url, shop_name)
+
+        self.write_state_file(self.fetched_columns)
 
     def _download_all_tables(self, start_date: str, end_date: str):
         params = self.configuration.parameters
@@ -164,7 +174,29 @@ class Component(ComponentBase):
                                     f"primary keys {primary_key} not in {fieldnames}")
 
         header_normalizer = get_normalizer(NormalizerStrategy.DEFAULT)
-        table.columns = header_normalizer.normalize_header(fieldnames)
+        table_columns = header_normalizer.normalize_header(fieldnames)
+
+        diff = []
+        if self.old_columns.get(table.name):
+            diff = [item for item in self.old_columns[table.name] if item not in table_columns]
+
+        if diff:
+            nr_of_empty_cols = len(diff)
+            empty_column = [''] * nr_of_empty_cols
+
+            with tempfile.NamedTemporaryFile(mode='wt', encoding='utf-8', newline='', delete=False) as f_temp:
+                csv_writer = csv.writer(f_temp)
+                with open(result_path, 'r') as f_read:
+                    csv_reader = csv.reader(f_read)
+                    for row in csv_reader:
+                        csv_writer.writerow(row + empty_column)
+
+            shutil.move(f_temp.name, result_path)
+
+        table_columns.extend(diff)
+        self.fetched_columns[table.name] = table_columns
+
+        table.columns = table_columns
         self.write_tabledef_manifest(table)
 
     def strip_quotes(self, list_of_str):
