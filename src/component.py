@@ -191,13 +191,15 @@ class Component(ComponentBase):
     @staticmethod
     def add_empty_cols(diff, result_path):
         nr_of_empty_cols = len(diff)
-        empty_column = [''] * nr_of_empty_cols
+        empty_column = [""] * nr_of_empty_cols
 
         with tempfile.NamedTemporaryFile(mode='wt', encoding='utf-8', newline='', delete=False) as f_temp:
-            csv_writer = csv.writer(f_temp)
+            csv_writer = csv.writer(f_temp, delimiter=";", quoting=csv.QUOTE_NONE, escapechar="\\")
             with open(result_path, 'r') as f_read:
                 csv_reader = csv.reader(f_read)
                 for row in csv_reader:
+                    print(row)
+                    print(row + empty_column)
                     csv_writer.writerow(row + empty_column)
 
         shutil.move(f_temp.name, result_path)
