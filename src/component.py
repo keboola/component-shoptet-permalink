@@ -197,7 +197,6 @@ class Component(ComponentBase):
                 csv_reader = csv.DictReader(f_read, delimiter=";")
                 fieldnames = csv_reader.fieldnames + diff
                 csv_writer = csv.DictWriter(f_temp_write, fieldnames=fieldnames, delimiter=";")
-                csv_writer.writeheader()
 
                 for row in csv_reader:
                     row.update(empty_column)
