@@ -47,6 +47,9 @@ class Component(ComponentBase):
             message="The localize method is no longer necessary, as this time zone supports the fold attribute",
         )
 
+        self.old_columns = {}  # columns loaded from statefile
+        self.fetched_columns = {}  # fetched columns
+
     def run(self):
         params = self.configuration.parameters
 
@@ -57,6 +60,10 @@ class Component(ComponentBase):
         dt_to_str = loading_options.get(KEY_DATE_TO, 'now')
         if not dt_to_str:
             dt_to_str = 'now'
+
+        statefile = self.get_state_file()
+        if statefile:
+            self.old_columns = statefile
 
         start_date, end_date = keboola_utils.parse_datetime_interval(dt_since_str, dt_to_str)
         backfill_mode = loading_options.get('backfill_mode')
@@ -77,6 +84,8 @@ class Component(ComponentBase):
         base_url = params.get(KEY_SHOP_BASE_URL)
         shop_name = params.get(KEY_SHOP_NAME)
         self.write_shoptet_table(base_url, shop_name)
+
+        self.write_state_file(self.fetched_columns)
 
     def _download_all_tables(self, start_date: str, end_date: str):
         params = self.configuration.parameters
@@ -164,8 +173,36 @@ class Component(ComponentBase):
                                     f"primary keys {primary_key} not in {fieldnames}")
 
         header_normalizer = get_normalizer(NormalizerStrategy.DEFAULT)
-        table.columns = header_normalizer.normalize_header(fieldnames)
+        table_columns = header_normalizer.normalize_header(fieldnames)
+
+        diff = []
+        if self.old_columns.get(table.name):
+            diff = [item for item in self.old_columns[table.name] if item not in table_columns]
+
+        if diff:
+            self.add_empty_cols(diff, result_path)
+
+        table_columns.extend(diff)
+        self.fetched_columns[table.name] = table_columns
+
+        table.columns = table_columns
         self.write_tabledef_manifest(table)
+
+    @staticmethod
+    def add_empty_cols(diff, result_path):
+        empty_column = {column: "" for column in diff}
+
+        with tempfile.NamedTemporaryFile(mode='wt', encoding='utf-8', newline='', delete=False) as f_temp:
+            with open(result_path, 'r') as f_read, open(f_temp.name, 'w', newline='') as f_temp_write:
+                csv_reader = csv.DictReader(f_read, delimiter=";")
+                fieldnames = csv_reader.fieldnames + diff
+                csv_writer = csv.DictWriter(f_temp_write, fieldnames=fieldnames, delimiter=";")
+
+                for row in csv_reader:
+                    row.update(empty_column)
+                    csv_writer.writerow(row)
+
+        shutil.move(f_temp.name, result_path)
 
     def strip_quotes(self, list_of_str):
         new_list = []
