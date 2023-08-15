@@ -261,7 +261,7 @@ class Component(ComponentBase):
             if url := params.get(resource):
                 if self._is_csv_url(url):
                     return
-                raise UserException(f"params.get(resource) is not a valid url. Please enter url of the csv file.")
+                raise UserException(f"{url} is not a valid url. Please enter url of the csv file.")
         raise UserException(f"At least one resource url from {RESOURCE_URLS} must be configured.")
 
     @staticmethod
