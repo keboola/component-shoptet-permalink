@@ -33,13 +33,12 @@ KEY_DATE_TO = "date_to"
 KEY_INCREMENTAL = "incremental_output"
 
 REQUIRED_PARAMETERS = [KEY_SRC_CHARSET, KEY_DELIMITER, KEY_SHOP_BASE_URL, KEY_SHOP_NAME]
-REQUIRED_IMAGE_PARS = []
+RESOURCE_URLS = [KEY_ORDERS_URL, KEY_PRODUCTS_URL, KEY_CUSTOMERS_URL, KEY_STOCK_URL]
 
 
 class Component(ComponentBase):
     def __init__(self):
-        super().__init__(required_parameters=REQUIRED_PARAMETERS,
-                         required_image_parameters=REQUIRED_IMAGE_PARS)
+        super().__init__(required_parameters=REQUIRED_PARAMETERS)
 
         # temp suppress pytz warning
         warnings.filterwarnings(
@@ -52,6 +51,7 @@ class Component(ComponentBase):
 
     def run(self):
         params = self.configuration.parameters
+        self._check_urls(params)
 
         loading_options = params.get(KEY_LOADING_OPTIONS, {})
         dt_since_str = loading_options.get(KEY_DATE_SINCE, '2009-01-01')
@@ -236,8 +236,12 @@ class Component(ComponentBase):
         try:
             res = requests.get(url, stream=True, allow_redirects=True)
             res.raise_for_status()
-        except RequestException as invalid:
-            raise UserException(invalid) from invalid
+        except RequestException as e:
+            if hasattr(e, 'response') and e.response is not None:
+                if e.response.status_code == 404:
+                    raise UserException(f"Resource {url} cannot be found. "
+                                        f"Please check if the url for this resource is valid.")
+            raise UserException(e) from e
         temp = tempfile.NamedTemporaryFile(mode='w+b', suffix='.csv', delete=False)
         with open(temp.name, 'wb+') as out:
             for chunk in res.iter_content(chunk_size=8192):
@@ -251,6 +255,23 @@ class Component(ComponentBase):
             writer = csv.DictWriter(out_file, table.columns)
             writer.writerow({"shop_base_url": base_url, "shop_name": shop_name})
         self.write_tabledef_manifest(table)
+
+    def _check_urls(self, params: dict):
+        for resource in RESOURCE_URLS:
+            if url := params.get(resource):
+                if self._is_csv_url(url):
+                    return
+                raise UserException(f"{url} is not a valid url. The export URL is most likely in unsupported format, "
+                                    f"please provide a CSV format export URL. "
+                                    f"If you are having trouble with creating permanent links, "
+                                    f"please visit the component's documentation.")
+        raise UserException(f"At least one resource url from {RESOURCE_URLS} must be configured.")
+
+    @staticmethod
+    def _is_csv_url(url: str) -> bool:
+        if ".csv" in url:
+            return True
+        return False
 
 
 if __name__ == "__main__":
