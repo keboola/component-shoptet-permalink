@@ -257,15 +257,27 @@ class Component(ComponentBase):
         self.write_tabledef_manifest(table)
 
     def _check_urls(self, params: dict):
+        url_found = False
         for resource in RESOURCE_URLS:
             if url := params.get(resource):
-                if self._is_csv_url(url):
-                    return
-                raise UserException(f"{url} is not a valid url. The export URL is most likely in unsupported format, "
+                url_found = True
+                if not self._is_csv_url(url):
+                    raise UserException(
+                        f"{url} is not a valid url. The export URL is most likely in unsupported format, "
+                        f"please provide a CSV format export URL. "
+                        f"If you are having trouble with creating permanent links, "
+                        f"please visit the component's documentation.")
+        for additional_datum in params.get(KEY_ADDITIONAL_DATA, []):
+            url_found = True
+            if not self._is_csv_url(additional_datum["url"]):
+                raise UserException(f"{additional_datum['url']} is not a valid url. "
+                                    f"The export URL is most likely in unsupported format, "
                                     f"please provide a CSV format export URL. "
                                     f"If you are having trouble with creating permanent links, "
                                     f"please visit the component's documentation.")
-        raise UserException(f"At least one resource url from {RESOURCE_URLS} must be configured.")
+
+        if not url_found:
+            raise UserException(f"At least one resource url from {RESOURCE_URLS} must be configured.")
 
     @staticmethod
     def _is_csv_url(url: str) -> bool:
