@@ -221,14 +221,14 @@ class Component(ComponentBase):
 
     @staticmethod
     def write_from_temp_to_table(temp_file_path, table_path, delimiter, encoding) -> List[str]:
-        with open(temp_file_path, mode='r', encoding=encoding) as in_file, \
+        with open(temp_file_path, mode='r', encoding=encoding, errors='replace') as in_file, \
                 open(table_path, mode='wt', encoding='utf-8', newline='') as out_file:
             fieldnames = in_file.readline()
             shutil.copyfileobj(in_file, out_file)
             # workaround for:
             # https://stackoverflow.com/questions/40310042/python-read-csv-bom-embedded-into-the-first-key
-            if fieldnames.startswith("\ufeff"):
-                fieldnames = fieldnames.replace("\ufeff", "")
+            fieldnames = fieldnames.lstrip("\ufeff").lstrip("ď»ż")
+
             return fieldnames.split(delimiter)
 
     @retry(ConnectionError, tries=3, delay=1)
