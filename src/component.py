@@ -241,8 +241,7 @@ class Component(ComponentBase):
                 return False
         return True
 
-    def write_from_temp_to_table(self, temp_file_path, table_path, delimiter,
-                                 encoding, all_seen_columns) -> tuple[list, list]:
+    def write_from_temp_to_table(self, temp_file_path, table_path, delimiter, encoding, all_seen_columns):
 
         with open(temp_file_path, mode='r', encoding=encoding) as in_file, \
                 open(table_path, mode='wt', encoding='utf-8', newline='') as out_file:
