@@ -47,7 +47,6 @@ class Component(ComponentBase):
         )
 
         self.old_columns = {}  # columns loaded from statefile
-        self.fetched_columns = {}  # fetched columns
 
     def run(self):
         params = self.configuration.parameters
@@ -85,7 +84,23 @@ class Component(ComponentBase):
         shop_name = params.get(KEY_SHOP_NAME)
         self.write_shoptet_table(base_url, shop_name)
 
-        self.write_state_file(self.fetched_columns)
+        # logging.info(f'Fetched columns: {len(self.old_columns.get('orders.csv', ''))}')
+
+        for table, columns in self.old_columns.items():
+            table_path = os.path.join(self.tables_out_path, table)
+
+            for table_slice in os.listdir(table_path):
+                if not table_slice.startswith('.'):
+                    slice_path = os.path.join(table_path, table_slice)
+
+                    # print(slice_path)
+                    with open(slice_path, 'r', encoding='utf-8', newline='') as f:
+                        slice_col_count = f.readline().split(';')
+
+                    if len(columns) > len(slice_col_count):
+                        self.add_empty_cols(columns, slice_path)
+
+        self.write_state_file(self.old_columns)
 
     def _download_all_tables(self, start_date: str, end_date: str):
         params = self.configuration.parameters
@@ -163,8 +178,11 @@ class Component(ComponentBase):
         Path(table.full_path).mkdir(parents=True, exist_ok=True)
         result_path = os.path.join(table.full_path, str(uuid.uuid4()))
 
-        fieldnames = self.write_from_temp_to_table(temp_file.name, result_path, delimiter, encoding)
-        fieldnames = self.strip_quotes(fieldnames)
+        all_seen_columns = self.old_columns.get(table.name, [])
+
+        fieldnames, all_seen_columns = self.write_from_temp_to_table(temp_file.name, result_path, delimiter,
+                                                                     encoding, all_seen_columns)
+
         if not self.valid_primary_keys(primary_key, fieldnames):
             if self.valid_primary_keys(alt_primary_key, fieldnames):
                 table.primary_key = alt_primary_key
@@ -175,31 +193,35 @@ class Component(ComponentBase):
         header_normalizer = get_normalizer(NormalizerStrategy.DEFAULT)
         table_columns = header_normalizer.normalize_header(fieldnames)
 
-        diff = []
-        if self.old_columns.get(table.name):
-            diff = [item for item in self.old_columns[table.name] if item not in table_columns]
+        logging.info(f"Table columns: {len(table_columns)}, fieldnames: {len(fieldnames)}")
 
-        if diff:
-            self.add_empty_cols(diff, result_path)
+        self.old_columns[table.name] = all_seen_columns
 
-        table_columns.extend(diff)
-        self.fetched_columns[table.name] = table_columns
-
-        table.columns = table_columns
         self.write_tabledef_manifest(table)
 
+    def add_missing_cols(self, columns, all_seen_columns):
+
+        missing_columns = [col for col in columns if col not in all_seen_columns]
+
+        all_seen_columns.extend(missing_columns)
+
+        return all_seen_columns
+
     @staticmethod
-    def add_empty_cols(diff, result_path):
-        empty_column = {column: "" for column in diff}
+    def add_empty_cols(all_columns, result_path):
 
         with tempfile.NamedTemporaryFile(mode='wt', encoding='utf-8', newline='', delete=False) as f_temp:
             with open(result_path, 'r') as f_read, open(f_temp.name, 'w', newline='') as f_temp_write:
                 csv_reader = csv.DictReader(f_read, delimiter=";")
-                fieldnames = csv_reader.fieldnames + diff
-                csv_writer = csv.DictWriter(f_temp_write, fieldnames=fieldnames, delimiter=";")
+                csv_writer = csv.DictWriter(f_temp_write, fieldnames=all_columns, delimiter=";")
 
                 for row in csv_reader:
-                    row.update(empty_column)
+                    for column in all_columns:
+                        if column not in row:
+                            row[column] = ''
+
+                    # csv_writer.writeheader()
+                    # csv_writer.writerow(dict(zip(all_columns, row)))
                     csv_writer.writerow(row)
 
         shutil.move(f_temp.name, result_path)
@@ -219,17 +241,25 @@ class Component(ComponentBase):
                 return False
         return True
 
-    @staticmethod
-    def write_from_temp_to_table(temp_file_path, table_path, delimiter, encoding) -> List[str]:
-        with open(temp_file_path, mode='r', encoding=encoding, errors='replace') as in_file, \
-                open(table_path, mode='wt', encoding='utf-8', newline='') as out_file:
-            fieldnames = in_file.readline()
-            shutil.copyfileobj(in_file, out_file)
-            # workaround for:
-            # https://stackoverflow.com/questions/40310042/python-read-csv-bom-embedded-into-the-first-key
-            fieldnames = fieldnames.lstrip("\ufeff").lstrip("ď»ż")
+    def write_from_temp_to_table(self, temp_file_path, table_path, delimiter,
+                                 encoding, all_seen_columns) -> tuple[list, list]:
 
-            return fieldnames.split(delimiter)
+        with open(temp_file_path, mode='r', encoding=encoding) as in_file, \
+                open(table_path, mode='wt', encoding='utf-8', newline='') as out_file:
+
+            reader = csv.DictReader(in_file, delimiter=delimiter)
+
+            fieldnames = self.add_missing_cols(reader.fieldnames, all_seen_columns)
+
+            writer = csv.DictWriter(out_file, fieldnames=fieldnames, delimiter=";")
+
+            # writer.writeheader()
+
+            for row in reader:
+                output_row = {column: row.get(column, '') for column in fieldnames}
+                writer.writerow(output_row)
+
+            return list(reader.fieldnames), [n.lstrip("\ufeff").lstrip("ď»ż") for n in fieldnames]
 
     @retry(ConnectionError, tries=3, delay=1)
     def fetch_data_from_url(self, url):
