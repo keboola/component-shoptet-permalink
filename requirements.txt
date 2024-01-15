@@ -5,3 +5,4 @@ mock
 freezegun
 retry
 furl
+keboola.csvwriter==1.0.1
