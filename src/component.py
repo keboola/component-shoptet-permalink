@@ -10,7 +10,7 @@ from keboola import utils as keboola_utils
 from keboola.component.base import ComponentBase, UserException
 from requests.exceptions import RequestException, ConnectionError
 from retry import retry
-from keboola.csvwriter import ElasticDictWriter
+from ElasticDictWriter import ElasticDictWriter
 
 DATE_FORMAT = '%Y-%m-%d'
 
