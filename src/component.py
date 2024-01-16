@@ -1,20 +1,19 @@
 import csv
 import logging
-import os
-import shutil
 import tempfile
-import uuid
 import warnings
-from pathlib import Path
 from typing import List
+from dataclasses import dataclass
 
 import requests
 from furl import furl
-from keboola import utils as keboola_utils
-from keboola.component.base import ComponentBase, UserException
-from keboola.utils.header_normalizer import get_normalizer, NormalizerStrategy
+from keboola.utils import date
+from keboola.component.dao import TableDefinition
+from keboola.component.base import ComponentBase
+from keboola.component.exceptions import UserException
 from requests.exceptions import RequestException, ConnectionError
 from retry import retry
+from keboola.csvwriter import ElasticDictWriter
 
 DATE_FORMAT = '%Y-%m-%d'
 
@@ -36,6 +35,12 @@ REQUIRED_PARAMETERS = [KEY_SRC_CHARSET, KEY_DELIMITER, KEY_SHOP_BASE_URL, KEY_SH
 RESOURCE_URLS = [KEY_ORDERS_URL, KEY_PRODUCTS_URL, KEY_CUSTOMERS_URL, KEY_STOCK_URL]
 
 
+@dataclass
+class WriterCacheRecord:
+    writer: ElasticDictWriter
+    table_definition: TableDefinition
+
+
 class Component(ComponentBase):
     def __init__(self):
         super().__init__(required_parameters=REQUIRED_PARAMETERS)
@@ -46,8 +51,8 @@ class Component(ComponentBase):
             message="The localize method is no longer necessary, as this time zone supports the fold attribute",
         )
 
-        self.old_columns = {}  # columns loaded from statefile
-        self.fetched_columns = {}  # fetched columns
+        self._writer_cache: dict[str, WriterCacheRecord] = dict()
+        self._last_table_columns = self.get_state_file().get('table_columns', {})
 
     def run(self):
         params = self.configuration.parameters
@@ -61,17 +66,13 @@ class Component(ComponentBase):
         if not dt_to_str:
             dt_to_str = 'now'
 
-        statefile = self.get_state_file()
-        if statefile:
-            self.old_columns = statefile
-
-        start_date, end_date = keboola_utils.parse_datetime_interval(dt_since_str, dt_to_str)
+        start_date, end_date = date.parse_datetime_interval(dt_since_str, dt_to_str)
         backfill_mode = loading_options.get('backfill_mode')
 
         if backfill_mode:
             chunk_size = loading_options.get("chunk_size_days")
 
-            date_chunks = keboola_utils.split_dates_to_chunks(start_date, end_date, chunk_size, strformat=DATE_FORMAT)
+            date_chunks = date.split_dates_to_chunks(start_date, end_date, chunk_size, strformat=DATE_FORMAT)
 
         else:
             date_chunks = [{"start_date": start_date.strftime(DATE_FORMAT),
@@ -85,7 +86,15 @@ class Component(ComponentBase):
         shop_name = params.get(KEY_SHOP_NAME)
         self.write_shoptet_table(base_url, shop_name)
 
-        self.write_state_file(self.fetched_columns)
+        table_columns = dict()
+
+        for table, cache_record in self._writer_cache.items():
+            cache_record.writer.writeheader()
+            cache_record.writer.close()
+            self.write_manifest(cache_record.table_definition)
+            table_columns[table] = cache_record.writer.fieldnames
+
+        self.write_state_file({"table_columns": table_columns})
 
     def _download_all_tables(self, start_date: str, end_date: str):
         params = self.configuration.parameters
@@ -101,7 +110,9 @@ class Component(ComponentBase):
             self.get_url_data_and_write_to_file(orders_url, "orders.csv", charset, delimiter,
                                                 primary_key=["code", "itemCode", "itemName"],
                                                 alt_primary_key=["code", "orderItemCode", "orderItemName"],
-                                                incremental=incremental)
+                                                incremental=incremental,
+                                                columns=["code", "date", "statusName", "currency", "exchangeRate", "email", "phone", "billFullName", "billCompany", "billStreet", "billHouseNumber", "billCity", "billZip", "billCountryName", "companyId", "vatId", "customerIdentificationNumber", "deliveryFullName", "deliveryCompany", "deliveryVatId", "deliveryStreet", "deliveryHouseNumber", "deliveryCity", "deliveryZip", "deliveryCountryName", "customerIpAddress", "remark", "shopRemark", "packageNumber", "varchar1", "varchar2", "varchar3", "text1", "text2", "text3", "weight", "totalPriceWithVat", "totalPriceWithoutVat", "totalPriceVat", "rounding", "priceToPay", "paid", "itemName", "itemAmount", "itemCode", "itemVariantName", "itemManufacturer", "itemUnit", "itemWeight", "itemStatusName", "itemUnitPriceWithVat", "itemUnitPriceWithoutVat", "itemUnitPriceVat", "itemVatRate", "itemTotalPriceWithVat", "itemTotalPriceWithoutVat", "itemTotalPriceVat", "itemEan", "itemPlu", "itemSupplier", "orderPurchasePrice", "orderItemUnitPurchasePrice", "orderItemTotalPurchasePrice", "orderItemDiscountPercent", "orderItemRemark", "referer"] # noqa
+                                                )
 
         products_url = params.get(KEY_PRODUCTS_URL)
         if products_url:
@@ -149,7 +160,9 @@ class Component(ComponentBase):
 
     def get_url_data_and_write_to_file(self, url, table_name, encoding, delimiter,
                                        primary_key: List[str], alt_primary_key: List[str] = None,
-                                       incremental: bool = False):
+                                       incremental: bool = False,
+                                       columns: List[str] = []
+                                       ):
 
         try:
             temp_file = self.fetch_data_from_url(url)
@@ -159,56 +172,15 @@ class Component(ComponentBase):
         table = self.create_out_table_definition(name=table_name, primary_key=primary_key, incremental=incremental)
         table.delimiter = delimiter
 
-        # sliced table for backfill mode
-        Path(table.full_path).mkdir(parents=True, exist_ok=True)
-        result_path = os.path.join(table.full_path, str(uuid.uuid4()))
+        fieldnames = self.write_from_temp_to_table(temp_file.name, table_name, primary_key, delimiter, encoding,
+                                                   columns)
 
-        fieldnames = self.write_from_temp_to_table(temp_file.name, result_path, delimiter, encoding)
-        fieldnames = self.strip_quotes(fieldnames)
         if not self.valid_primary_keys(primary_key, fieldnames):
             if self.valid_primary_keys(alt_primary_key, fieldnames):
                 table.primary_key = alt_primary_key
             else:
                 raise UserException(f"Error adding primary keys to file {table_name}, please contact support. "
                                     f"primary keys {primary_key} not in {fieldnames}")
-
-        header_normalizer = get_normalizer(NormalizerStrategy.DEFAULT)
-        table_columns = header_normalizer.normalize_header(fieldnames)
-
-        diff = []
-        if self.old_columns.get(table.name):
-            diff = [item for item in self.old_columns[table.name] if item not in table_columns]
-
-        if diff:
-            self.add_empty_cols(diff, result_path)
-
-        table_columns.extend(diff)
-        self.fetched_columns[table.name] = table_columns
-
-        table.columns = table_columns
-        self.write_tabledef_manifest(table)
-
-    @staticmethod
-    def add_empty_cols(diff, result_path):
-        empty_column = {column: "" for column in diff}
-
-        with tempfile.NamedTemporaryFile(mode='wt', encoding='utf-8', newline='', delete=False) as f_temp:
-            with open(result_path, 'r') as f_read, open(f_temp.name, 'w', newline='') as f_temp_write:
-                csv_reader = csv.DictReader(f_read, delimiter=";")
-                fieldnames = csv_reader.fieldnames + diff
-                csv_writer = csv.DictWriter(f_temp_write, fieldnames=fieldnames, delimiter=";")
-
-                for row in csv_reader:
-                    row.update(empty_column)
-                    csv_writer.writerow(row)
-
-        shutil.move(f_temp.name, result_path)
-
-    def strip_quotes(self, list_of_str):
-        new_list = []
-        for val in list_of_str:
-            new_list.append(val.replace("\"", ""))
-        return new_list
 
     @staticmethod
     def valid_primary_keys(primary_key, fieldnames):
@@ -219,17 +191,16 @@ class Component(ComponentBase):
                 return False
         return True
 
-    @staticmethod
-    def write_from_temp_to_table(temp_file_path, table_path, delimiter, encoding) -> List[str]:
-        with open(temp_file_path, mode='r', encoding=encoding) as in_file, \
-                open(table_path, mode='wt', encoding='utf-8', newline='') as out_file:
-            fieldnames = in_file.readline()
-            shutil.copyfileobj(in_file, out_file)
-            # workaround for:
-            # https://stackoverflow.com/questions/40310042/python-read-csv-bom-embedded-into-the-first-key
-            if fieldnames.startswith("\ufeff"):
-                fieldnames = fieldnames.replace("\ufeff", "")
-            return fieldnames.split(delimiter)
+    def write_from_temp_to_table(self, temp_file_path, table_path, primary_key, delimiter, encoding, columns):
+        with open(temp_file_path, mode='r', encoding=encoding) as in_file:
+            reader = csv.DictReader(in_file, delimiter=delimiter)
+
+            self.write_to_csv(reader, table_path, incremental_load=False, primary_keys=primary_key, columns=columns)
+
+            fieldnames = reader.fieldnames
+            fieldnames = [n.lstrip("\ufeff").lstrip("ď»ż") for n in fieldnames]
+
+            return fieldnames
 
     @retry(ConnectionError, tries=3, delay=1)
     def fetch_data_from_url(self, url):
@@ -248,13 +219,40 @@ class Component(ComponentBase):
                 out.write(chunk)
         return temp
 
+    def write_to_csv(self, input_data: csv.DictReader,
+                     table_name: str,
+                     incremental_load: bool,
+                     primary_keys: List[str],
+                     columns: List[str],
+                     ) -> None:
+
+        if not self._writer_cache.get(table_name):
+
+            table_def = self.create_out_table_definition(name=table_name,
+                                                         primary_key=primary_keys,
+                                                         incremental=incremental_load,
+                                                         # columns=columns
+                                                         )
+
+            columns = self._last_table_columns.get(table_name, []) or columns
+            writer = ElasticDictWriter(table_def.full_path, columns)
+            self._writer_cache[table_name] = WriterCacheRecord(writer, table_def)
+
+        writer = self._writer_cache[table_name].writer
+
+        for record in input_data:
+            record['empty'] = record.pop('')
+            writer.writerow(record)
+
+        logging.debug(f"Table columns: {str(writer.fieldnames)}, fieldnames: {len(writer.fieldnames)}")
+
     def write_shoptet_table(self, base_url, shop_name):
         shoptet_file_name = "shoptet.csv"
         table = self.create_out_table_definition(name=shoptet_file_name, columns=["shop_base_url", "shop_name"])
         with open(table.full_path, mode='wt', encoding='utf-8', newline='') as out_file:
             writer = csv.DictWriter(out_file, table.columns)
             writer.writerow({"shop_base_url": base_url, "shop_name": shop_name})
-        self.write_tabledef_manifest(table)
+        self.write_manifest(table)
 
     def _check_urls(self, params: dict):
         url_found = False
