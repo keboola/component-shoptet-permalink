@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import requests
 from furl import furl
 from keboola.utils import date
+from keboola.utils.header_normalizer import get_normalizer, NormalizerStrategy
 from keboola.component.dao import TableDefinition
 from keboola.component.base import ComponentBase
 from keboola.component.exceptions import UserException
@@ -51,6 +52,8 @@ class Component(ComponentBase):
             message="The localize method is no longer necessary, as this time zone supports the fold attribute",
         )
 
+        self._header_normalizer = get_normalizer(NormalizerStrategy.DEFAULT)
+
         self._writer_cache: dict[str, WriterCacheRecord] = dict()
         self._last_table_columns = (self.get_state_file().get('table_columns', {})
                                     or self.get_state_file().get('component', {}))  # legacy compatibility
@@ -92,7 +95,12 @@ class Component(ComponentBase):
         for table, cache_record in self._writer_cache.items():
             cache_record.writer.writeheader()
             cache_record.writer.close()
-            self.write_manifest(cache_record.table_definition)
+            table_definition = self.create_out_table_definition(name=cache_record.table_definition.name,
+                                                                primary_key=cache_record.table_definition.primary_key,
+                                                                incremental=cache_record.table_definition.incremental,
+                                                                columns=cache_record.writer.fieldnames)
+
+            self.write_manifest(table_definition)
             table_columns[table] = cache_record.writer.fieldnames
 
         self.write_state_file({"table_columns": table_columns})
@@ -207,10 +215,11 @@ class Component(ComponentBase):
 
             self.write_to_csv(reader, table_path, incremental_load=False, primary_keys=primary_key, columns=columns)
 
-            fieldnames = reader.fieldnames
+            fieldnames = list(reader.fieldnames)
 
             # handling weirdly named columns
-            fieldnames = [n.lstrip("ď»ż").replace('\ufeff\"code\"', 'code') for n in fieldnames]
+            fieldnames = self._header_normalizer.normalize_header(fieldnames)
+            # fieldnames = [n.lstrip("ď»ż").replace('\ufeff\"code\"', 'code') for n in fieldnames]
 
             return fieldnames
 
@@ -254,12 +263,16 @@ class Component(ComponentBase):
         for record in input_data:
 
             # handling weirdly named columns
-            if record.get(''):
-                record['empty'] = record.pop('')
-            if record.get('\ufeff\"code\"'):
-                record['code'] = record.pop('\ufeff\"code\"')
 
-            writer.writerow(record)
+            normalized_names = self._header_normalizer.normalize_header(list(record.keys()))
+            normalized_dict = dict(zip(normalized_names, record.values()))
+
+            # if record.get(''):
+            #     record['empty'] = record.pop('')
+            # if record.get('\ufeff\"code\"'):
+            #     record['code'] = record.pop('\ufeff\"code\"')
+
+            writer.writerow(normalized_dict)
 
         logging.debug(f"Table columns: {str(writer.fieldnames)}, fieldnames: {len(writer.fieldnames)}")
 
