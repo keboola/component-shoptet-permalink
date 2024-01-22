@@ -52,7 +52,8 @@ class Component(ComponentBase):
         )
 
         self._writer_cache: dict[str, WriterCacheRecord] = dict()
-        self._last_table_columns = self.get_state_file().get('table_columns', {})
+        self._last_table_columns = (self.get_state_file().get('table_columns', {})
+                                    or self.get_state_file().get('component', {}))  # legacy compatibility
 
     def run(self):
         params = self.configuration.parameters
@@ -111,7 +112,7 @@ class Component(ComponentBase):
                                                 primary_key=["code", "itemCode", "itemName"],
                                                 alt_primary_key=["code", "orderItemCode", "orderItemName"],
                                                 incremental=incremental,
-                                                columns=["code", "date", "statusName", "currency", "exchangeRate", "email", "phone", "billFullName", "billCompany", "billStreet", "billHouseNumber", "billCity", "billZip", "billCountryName", "companyId", "vatId", "customerIdentificationNumber", "deliveryFullName", "deliveryCompany", "deliveryVatId", "deliveryStreet", "deliveryHouseNumber", "deliveryCity", "deliveryZip", "deliveryCountryName", "customerIpAddress", "remark", "shopRemark", "packageNumber", "varchar1", "varchar2", "varchar3", "text1", "text2", "text3", "weight", "totalPriceWithVat", "totalPriceWithoutVat", "totalPriceVat", "rounding", "priceToPay", "paid", "itemName", "itemAmount", "itemCode", "itemVariantName", "itemManufacturer", "itemUnit", "itemWeight", "itemStatusName", "itemUnitPriceWithVat", "itemUnitPriceWithoutVat", "itemUnitPriceVat", "itemVatRate", "itemTotalPriceWithVat", "itemTotalPriceWithoutVat", "itemTotalPriceVat", "itemEan", "itemPlu", "itemSupplier", "orderPurchasePrice", "orderItemUnitPurchasePrice", "orderItemTotalPurchasePrice", "orderItemDiscountPercent", "orderItemRemark", "referer"] # noqa
+                                                columns=["code", "date", "itemCode", "itemName"]  # to have id and date as the first columns  # noqa: E501
                                                 )
 
         products_url = params.get(KEY_PRODUCTS_URL)
@@ -158,7 +159,10 @@ class Component(ComponentBase):
         url_parsed.set(query_params)
         return url_parsed.url
 
-    def get_url_data_and_write_to_file(self, url, table_name, encoding, delimiter,
+    def get_url_data_and_write_to_file(self, url,
+                                       table_name: str,
+                                       encoding: str,
+                                       delimiter: str,
                                        primary_key: List[str], alt_primary_key: List[str] = None,
                                        incremental: bool = False,
                                        columns: List[str] = []
@@ -191,14 +195,22 @@ class Component(ComponentBase):
                 return False
         return True
 
-    def write_from_temp_to_table(self, temp_file_path, table_path, primary_key, delimiter, encoding, columns):
+    def write_from_temp_to_table(self, temp_file_path: str,
+                                 table_path: str,
+                                 primary_key: List[str],
+                                 delimiter: str,
+                                 encoding: str,
+                                 columns: List[str]):
+
         with open(temp_file_path, mode='r', encoding=encoding) as in_file:
             reader = csv.DictReader(in_file, delimiter=delimiter)
 
             self.write_to_csv(reader, table_path, incremental_load=False, primary_keys=primary_key, columns=columns)
 
             fieldnames = reader.fieldnames
-            fieldnames = [n.lstrip("\ufeff").lstrip("ď»ż") for n in fieldnames]
+
+            # handling weirdly named columns
+            fieldnames = [n.lstrip("ď»ż").replace('\ufeff\"code\"', 'code') for n in fieldnames]
 
             return fieldnames
 
@@ -227,7 +239,6 @@ class Component(ComponentBase):
                      ) -> None:
 
         if not self._writer_cache.get(table_name):
-
             table_def = self.create_out_table_definition(name=table_name,
                                                          primary_key=primary_keys,
                                                          incremental=incremental_load,
@@ -241,8 +252,13 @@ class Component(ComponentBase):
         writer = self._writer_cache[table_name].writer
 
         for record in input_data:
+
+            # handling weirdly named columns
             if record.get(''):
                 record['empty'] = record.pop('')
+            if record.get('\ufeff\"code\"'):
+                record['code'] = record.pop('\ufeff\"code\"')
+
             writer.writerow(record)
 
         logging.debug(f"Table columns: {str(writer.fieldnames)}, fieldnames: {len(writer.fieldnames)}")
