@@ -241,7 +241,8 @@ class Component(ComponentBase):
         writer = self._writer_cache[table_name].writer
 
         for record in input_data:
-            record['empty'] = record.pop('')
+            if record.get(''):
+                record['empty'] = record.pop('')
             writer.writerow(record)
 
         logging.debug(f"Table columns: {str(writer.fieldnames)}, fieldnames: {len(writer.fieldnames)}")
