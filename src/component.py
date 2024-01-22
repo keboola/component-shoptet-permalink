@@ -219,7 +219,6 @@ class Component(ComponentBase):
 
             # handling weirdly named columns
             fieldnames = self._header_normalizer.normalize_header(fieldnames)
-            # fieldnames = [n.lstrip("ď»ż").replace('\ufeff\"code\"', 'code') for n in fieldnames]
 
             return fieldnames
 
@@ -266,11 +265,6 @@ class Component(ComponentBase):
 
             normalized_names = self._header_normalizer.normalize_header(list(record.keys()))
             normalized_dict = dict(zip(normalized_names, record.values()))
-
-            # if record.get(''):
-            #     record['empty'] = record.pop('')
-            # if record.get('\ufeff\"code\"'):
-            #     record['code'] = record.pop('\ufeff\"code\"')
 
             writer.writerow(normalized_dict)
 
