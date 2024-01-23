@@ -95,7 +95,6 @@ class Component(ComponentBase):
         table_columns = dict()
 
         for table, cache_record in self._writer_cache.items():
-            cache_record.writer.writeheader()
             cache_record.writer.close()
             table_definition = self.create_out_table_definition(name=cache_record.table_definition.name,
                                                                 primary_key=cache_record.table_definition.primary_key,
