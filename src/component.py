@@ -257,8 +257,6 @@ class Component(ComponentBase):
                      columns: List[str],
                      ) -> None:
 
-        logging.debug(f"Write to csv for {table_name}")
-
         if not self._writer_cache.get(table_name):
             logging.debug(f"Creating writer for {table_name}")
 
