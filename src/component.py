@@ -55,10 +55,12 @@ class Component(ComponentBase):
         self._header_normalizer = get_normalizer(NormalizerStrategy.DEFAULT)
 
         self._writer_cache: dict[str, WriterCacheRecord] = dict()
-        self._last_table_columns = (self.get_state_file().get('table_columns', {})
-                                    or self.get_state_file().get('component', {}))  # legacy compatibility
+        self._last_table_columns = self.get_state_file().get('table_columns', {}) or self.get_state_file()
 
     def run(self):
+        logging.debug(f"Last columns contains {str(len(self._last_table_columns))} tables: "
+                      f"{str(self._last_table_columns.keys())} and: {str(self._last_table_columns)}")
+
         params = self.configuration.parameters
         self._check_urls(params)
 
@@ -102,6 +104,11 @@ class Component(ComponentBase):
 
             self.write_manifest(table_definition)
             table_columns[table] = cache_record.writer.fieldnames
+            logging.debug(f"Manifest for {table} table contains {len(table_definition.columns)} columns."
+                          f"Columns: {str(table_definition.columns)}")
+
+            logging.debug(f"Writer for {table} table contains {len(cache_record.writer.fieldnames)} columns."
+                          f"Columns: {str(cache_record.writer.fieldnames)}")
 
         self.write_state_file({"table_columns": table_columns})
 
@@ -181,7 +188,11 @@ class Component(ComponentBase):
         except UnicodeDecodeError:
             raise UserException(f"Failed to decode file with {encoding}, use a different encoding")
         logging.debug(f"Downloaded {table_name}, saving to tables")
-        table = self.create_out_table_definition(name=table_name, primary_key=primary_key, incremental=incremental)
+        columns = self._last_table_columns.get(table_name, []) or columns
+        table = self.create_out_table_definition(name=table_name,
+                                                 primary_key=primary_key,
+                                                 incremental=incremental,
+                                                 columns=columns)
         table.delimiter = delimiter
 
         fieldnames = self.write_from_temp_to_table(temp_file.name, table_name, primary_key, delimiter, encoding,
@@ -247,17 +258,26 @@ class Component(ComponentBase):
                      ) -> None:
 
         if not self._writer_cache.get(table_name):
+            logging.debug(f"Creating writer for {table_name}")
+
             table_def = self.create_out_table_definition(name=table_name,
                                                          primary_key=primary_keys,
                                                          incremental=incremental_load,
                                                          # columns=columns
                                                          )
 
-            columns = self._last_table_columns.get(table_name, []) or columns
             writer = ElasticDictWriter(table_def.full_path, columns)
             self._writer_cache[table_name] = WriterCacheRecord(writer, table_def)
 
+            logging.debug(
+                f"Loaded {len(writer.fieldnames)} columns from state file for {table_name} table."
+                f"Columns: {str(writer.fieldnames)}")
+
         writer = self._writer_cache[table_name].writer
+        logging.debug(
+            f"Using writer for {writer.result_path} / {self._writer_cache[table_name].table_definition.name} "
+            f"with {len(writer.fieldnames)} columns."
+            f"Columns: {str(writer.fieldnames)}")
 
         for record in input_data:
 
@@ -268,7 +288,9 @@ class Component(ComponentBase):
 
             writer.writerow(normalized_dict)
 
-        logging.debug(f"Table columns: {str(writer.fieldnames)}, fieldnames: {len(writer.fieldnames)}")
+        logging.debug(
+            f"Writer for {table_name} contains {len(writer.fieldnames)} columns."
+            f"Columns: {str(writer.fieldnames)}")
 
     def write_shoptet_table(self, base_url, shop_name):
         shoptet_file_name = "shoptet.csv"
