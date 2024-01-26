@@ -136,7 +136,8 @@ class Component(ComponentBase):
             products_url = self._add_date_url_parameters(products_url, start_date, end_date)
             self.get_url_data_and_write_to_file(products_url, "products.csv", charset, delimiter,
                                                 primary_key=["code"],
-                                                incremental=incremental)
+                                                incremental=incremental,
+                                                columns=["code"])
 
         customers_url = params.get(KEY_CUSTOMERS_URL)
         if customers_url:
@@ -144,7 +145,8 @@ class Component(ComponentBase):
             customers_url = self._add_date_url_parameters(customers_url, start_date, end_date)
             self.get_url_data_and_write_to_file(customers_url, "customers.csv", charset, delimiter,
                                                 primary_key=["accountGuid"],
-                                                incremental=incremental)
+                                                incremental=incremental,
+                                                columns=["accountGuid"])
 
         stock_url = params.get(KEY_STOCK_URL)
         if stock_url:
@@ -152,7 +154,8 @@ class Component(ComponentBase):
             stock_url = self._add_date_url_parameters(stock_url, start_date, end_date)
             self.get_url_data_and_write_to_file(stock_url, "stocks.csv", charset, delimiter,
                                                 primary_key=["itemCode"],
-                                                incremental=incremental)
+                                                incremental=incremental,
+                                                columns=["itemCode"])
 
         additional_data = params.get(KEY_ADDITIONAL_DATA, [])
         for additional_datum in additional_data:
@@ -162,7 +165,8 @@ class Component(ComponentBase):
             add_url = self._add_date_url_parameters(additional_datum["url"], start_date, end_date)
             self.get_url_data_and_write_to_file(add_url, file_name, charset, delimiter,
                                                 primary_key=primary_key,
-                                                incremental=incremental)
+                                                incremental=incremental,
+                                                columns=["code"])
 
     @staticmethod
     def _add_date_url_parameters(url: str, start_date: str, end_date: str):
@@ -195,7 +199,7 @@ class Component(ComponentBase):
         table.delimiter = delimiter
 
         fieldnames = self.write_from_temp_to_table(temp_file.name, table_name, primary_key, delimiter, encoding,
-                                                   columns)
+                                                   columns, incremental)
 
         if not self.valid_primary_keys(primary_key, fieldnames):
             if self.valid_primary_keys(alt_primary_key, fieldnames):
@@ -218,12 +222,13 @@ class Component(ComponentBase):
                                  primary_key: List[str],
                                  delimiter: str,
                                  encoding: str,
-                                 columns: List[str]):
+                                 columns: List[str],
+                                 incremental: bool = False):
 
         with open(temp_file_path, mode='r', encoding=encoding) as in_file:
             reader = csv.DictReader(in_file, delimiter=delimiter)
-
-            self.write_to_csv(reader, table_path, incremental_load=False, primary_keys=primary_key, columns=columns)
+            self.write_to_csv(reader, table_path, incremental_load=incremental,
+                              primary_keys=primary_key, columns=columns)
 
             fieldnames = list(reader.fieldnames)
 
