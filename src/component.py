@@ -2,19 +2,19 @@ import csv
 import logging
 import tempfile
 import warnings
-from typing import List
 from dataclasses import dataclass
+from typing import List
 
 import requests
 from furl import furl
+from keboola.component.base import ComponentBase
+from keboola.component.dao import TableDefinition
+from keboola.component.exceptions import UserException
+from keboola.csvwriter import ElasticDictWriter
 from keboola.utils import date
 from keboola.utils.header_normalizer import get_normalizer, NormalizerStrategy
-from keboola.component.dao import TableDefinition
-from keboola.component.base import ComponentBase
-from keboola.component.exceptions import UserException
 from requests.exceptions import RequestException, ConnectionError
 from retry import retry
-from keboola.csvwriter import ElasticDictWriter
 
 DATE_FORMAT = '%Y-%m-%d'
 
@@ -126,7 +126,8 @@ class Component(ComponentBase):
                                                 primary_key=["code", "itemCode", "itemName"],
                                                 alt_primary_key=["code", "orderItemCode", "orderItemName"],
                                                 incremental=incremental,
-                                                columns=["code", "date", "itemCode", "itemName"]  # to have id and date as the first columns  # noqa: E501
+                                                columns=["code", "date", "itemCode", "itemName"]
+                                                # to have id and date as the first columns  # noqa: E501
                                                 )
 
         products_url = params.get(KEY_PRODUCTS_URL)
@@ -198,8 +199,11 @@ class Component(ComponentBase):
                                                  columns=columns)
         table.delimiter = delimiter
 
-        fieldnames = self.write_from_temp_to_table(temp_file.name, table_name, primary_key, delimiter, encoding,
-                                                   columns, incremental)
+        try:
+            fieldnames = self.write_from_temp_to_table(temp_file.name, table_name, primary_key, delimiter, encoding,
+                                                       columns, incremental)
+        except UnicodeDecodeError as e:
+            raise UserException(f"Failed to decode file with {encoding}, use a different encoding") from e
 
         if not self.valid_primary_keys(primary_key, fieldnames):
             if self.valid_primary_keys(alt_primary_key, fieldnames):
@@ -284,7 +288,6 @@ class Component(ComponentBase):
             f"Columns: {str(writer.fieldnames)}")
 
         for record in input_data:
-
             # handling weirdly named columns
 
             normalized_names = self._header_normalizer.normalize_header(list(record.keys()))
