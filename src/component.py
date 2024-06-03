@@ -117,6 +117,8 @@ class Component(ComponentBase):
         delimiter = params.get(KEY_DELIMITER)
         loading_options = params.get(KEY_LOADING_OPTIONS, {})
         incremental = loading_options.get(KEY_INCREMENTAL)
+        if incremental in ["false", "0", "full-load"]:
+            incremental = False
 
         orders_url = params.get(KEY_ORDERS_URL)
         if orders_url:
@@ -187,12 +189,14 @@ class Component(ComponentBase):
                                        columns: List[str] = []
                                        ):
 
+        logging.debug(f"Columns in function {len(columns)} : {columns}")
         try:
             temp_file = self.fetch_data_from_url(url)
         except UnicodeDecodeError:
             raise UserException(f"Failed to decode file with {encoding}, use a different encoding")
         logging.debug(f"Downloaded {table_name}, saving to tables")
         columns = self._last_table_columns.get(table_name, []) or columns
+        logging.debug(f"Columns after in function {len(columns)} : {columns}")
         table = self.create_out_table_definition(name=table_name,
                                                  primary_key=primary_key,
                                                  incremental=incremental,
