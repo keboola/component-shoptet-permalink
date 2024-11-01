@@ -225,6 +225,13 @@
           },
           "description": "If set to Incremental update, the result tables will be updated based on primary key. Full load overwrites the destination table each time. NOTE: If you wish to remove deleted records, this needs to be set to Full load and the Period from attribute empty.",
           "propertyOrder": 450
+        },
+        "use_alt_primary_keys": {
+          "type": "boolean",
+          "format": "checkbox",
+          "title": "Use alternative primary keys for orders table: \"code\", \"orderItemCode\", \"orderItemName\"",
+          "default": 360,
+          "propertyOrder": 600
         }
       },
       "propertyOrder": 400
