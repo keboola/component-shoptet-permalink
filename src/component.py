@@ -31,7 +31,6 @@ KEY_LOADING_OPTIONS = "loading_options"
 KEY_DATE_SINCE = "date_since"
 KEY_DATE_TO = "date_to"
 KEY_INCREMENTAL = "incremental_output"
-KEY_USE_ALT_PRIMARY_KEYS = "use_alt_primary_keys"
 
 REQUIRED_PARAMETERS = [KEY_SRC_CHARSET, KEY_DELIMITER, KEY_SHOP_BASE_URL, KEY_SHOP_NAME]
 RESOURCE_URLS = [KEY_ORDERS_URL, KEY_PRODUCTS_URL, KEY_CUSTOMERS_URL, KEY_STOCK_URL]
@@ -206,12 +205,12 @@ class Component(ComponentBase):
         except UnicodeDecodeError as e:
             raise UserException(f"Failed to decode file with {encoding}, use a different encoding") from e
 
-        use_alt_keys = self.configuration.parameters.get(KEY_LOADING_OPTIONS, {}).get(KEY_USE_ALT_PRIMARY_KEYS)
-        if not self.valid_primary_keys(primary_key, fieldnames) or use_alt_keys:
-            self._writer_cache[table_name].table_definition.primary_key = alt_primary_key
-        else:
-            raise UserException(f"Error adding primary keys to file {table_name}, please contact support. "
-                                f"primary keys {primary_key} not in {fieldnames}")
+        if not self.valid_primary_keys(primary_key, fieldnames):
+            if self.valid_primary_keys(alt_primary_key, fieldnames):
+                self._writer_cache[table_name].table_definition.primary_key = alt_primary_key
+            else:
+                raise UserException(f"Error adding primary keys to file {table_name}, please contact support. "
+                                    f"primary keys {primary_key} not in {fieldnames}")
 
     @staticmethod
     def valid_primary_keys(primary_key, fieldnames):
