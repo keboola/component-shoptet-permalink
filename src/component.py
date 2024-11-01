@@ -207,7 +207,7 @@ class Component(ComponentBase):
 
         if not self.valid_primary_keys(primary_key, fieldnames):
             if self.valid_primary_keys(alt_primary_key, fieldnames):
-                table.primary_key = alt_primary_key
+                self._writer_cache[table_name].table_definition.primary_key = alt_primary_key
             else:
                 raise UserException(f"Error adding primary keys to file {table_name}, please contact support. "
                                     f"primary keys {primary_key} not in {fieldnames}")
