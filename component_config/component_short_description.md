@@ -1,1 +1,1 @@
-Shoptet is a company that helps clients manage their eshops.
+Extracts Shoptet e-shop data from permalink URLs.
